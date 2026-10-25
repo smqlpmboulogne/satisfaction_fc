@@ -45,10 +45,24 @@
 
   <div class="message" id="message"></div>
 
-  <div id="home-view">
+    <div id="home-view">
     <div class="loading" id="loading-home">
       <div class="spin"></div><div>Chargement des enquêtes…</div>
     </div>
+    
+    
+    <div id="global-satisfaction" class="box accent detail-header" style="margin-bottom: 20px; display: none;">
+      <div class="info">
+        <div class="eyebrow">Vue d'ensemble FC</div>
+        <h1>Taux de satisfaction global</h1>
+        <div class="sub">Calculé sur l'ensemble des réponses</div>
+      </div>
+      <div class="rate-block">
+        <div class="label">Taux moyen</div>
+        <div class="value" id="global-rate-value">—</div>
+      </div>
+    </div>
+
     <div class="cards-grid" id="cards-grid"></div>
   </div>
 
