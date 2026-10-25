@@ -10,7 +10,7 @@ const NOMS_ENQUETES = {
 };
 
 const CACHE_PREFIX = "sat_dash_fc_v64_";
-const CACHE_TTL    = 5 * 60 * 1000;
+const CACHE_TTL    = 0;
 const SHEETS_KEY   = "sat_sheets_fc_v64";
 const SHEETS_TTL   = 60 * 60 * 1000;
 
