@@ -150,7 +150,9 @@ function buildUrl(sheet, opts = {}) {
 
 async function fetchJson(url) { 
   try {
-    const rep = await fetch(url, { cache: "no-store" }); 
+    // On ajoute un horodatage pour forcer Google à nous donner les données fraîches
+    const urlSansCache = url + "&nocache=" + Date.now();
+    const rep = await fetch(urlSansCache, { cache: "no-store" }); 
     if (!rep.ok) throw new Error("HTTP " + rep.status); 
     return rep.json(); 
   } catch(e) {
