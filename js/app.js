@@ -2,7 +2,6 @@
    Tableau de bord Satisfaction — Projet FC (Proxy Cloudflare)
    ============================================================ */
 
-// 👇 URL du Worker Cloudflare pour le FC (Attention au "L" et non "i")
 const API_URL = "https://proxy-satisfaction.smqlpmboulogne.workers.dev/?target=fc";
 
 const NOMS_ENQUETES = {
@@ -10,7 +9,7 @@ const NOMS_ENQUETES = {
 };
 
 const CACHE_PREFIX = "sat_dash_fc_v64_";
-const CACHE_TTL    = 0;
+const CACHE_TTL    = 0; // Cache désactivé pour voir les nouvelles réponses immédiatement
 const SHEETS_KEY   = "sat_sheets_fc_v64";
 const SHEETS_TTL   = 60 * 60 * 1000;
 
@@ -150,7 +149,6 @@ function buildUrl(sheet, opts = {}) {
 
 async function fetchJson(url) { 
   try {
-    // On ajoute un horodatage pour forcer Google à nous donner les données fraîches
     const urlSansCache = url + "&nocache=" + Date.now();
     const rep = await fetch(urlSansCache, { cache: "no-store" }); 
     if (!rep.ok) throw new Error("HTTP " + rep.status); 
@@ -189,7 +187,6 @@ async function chargerToutesLesCartes() {
   zone.innerHTML = "";
   document.getElementById("loading-home").hidden = false;
   
-  // On cache le bandeau global au début du chargement
   const globalBanner = document.getElementById("global-satisfaction");
   if (globalBanner) globalBanner.style.display = "none";
 
@@ -207,7 +204,6 @@ async function chargerToutesLesCartes() {
   filters.summary = 1;
   sheetsList.forEach(sheet => zone.appendChild(squeletteCarte(sheet)));
 
-  // --- NOUVEAU : Variables pour calculer la moyenne globale ---
   let totalReponsesGlobal = 0;
   let totalPointsGlobal = 0;
 
@@ -216,7 +212,6 @@ async function chargerToutesLesCartes() {
       const data = await fetchDashboard(sheet, filters);
       if (id !== requeteId) return;
       
-      // --- NOUVEAU : On additionne les données valides ---
       if (data && data.success !== false && (data.reponses || 0) > 0) {
         const hasNote = data.hasNote || (data.criteresNote && data.criteresNote.length > 0);
         if (hasNote && typeof data.satisfactionGlobale === 'number') {
@@ -224,7 +219,6 @@ async function chargerToutesLesCartes() {
           totalPointsGlobal += (data.satisfactionGlobale * data.reponses);
         }
       }
-      // ----------------------------------------------------------
 
       remplacerCarte(sheet, carteFinale(sheet, data));
     } catch (err) {
@@ -233,13 +227,11 @@ async function chargerToutesLesCartes() {
     }
   }));
   
-  // --- NOUVEAU : Affichage du taux global calculé ---
   if (id === requeteId && totalReponsesGlobal > 0 && globalBanner) {
     const tauxMoyen = totalPointsGlobal / totalReponsesGlobal;
     const valEl = document.getElementById("global-rate-value");
     valEl.textContent = fmtPct(tauxMoyen);
     
-    // On applique la couleur (vert, orange, rouge) selon le niveau
     const lvl = niveau(tauxMoyen);
     globalBanner.className = "box accent detail-header " + lvl;
     globalBanner.style.display = "flex";
@@ -275,9 +267,22 @@ function carteFinale(sheet, data) {
   if (ok && !hasNote) card.classList.add("no-notes");
 
   let rateTxt = "—", metaTxt = "Aucune réponse";
-  if (data && data.success === false) { rateTxt = "⚠"; metaTxt = "Erreur"; }
-  else if (ok && hasNote) { rateTxt = fmtPct(data.satisfactionGlobale); metaTxt = data.reponses + " réponse" + (data.reponses > 1 ? "s" : ""); }
-  else if (ok && !hasNote) { rateTxt = data.nps ? data.nps.npsScore + " NPS" : "N/A"; metaTxt = data.reponses + " réponse" + (data.reponses > 1 ? "s" : ""); }
+  
+  if (data && data.success === false) { 
+    rateTxt = "⚠"; 
+    metaTxt = "Erreur"; 
+  } 
+  else if (ok) {
+    // On prépare le texte des réponses et des refus
+    let txtReponses = data.reponses + " réponse" + (data.reponses > 1 ? "s" : "");
+    if (data.refus && data.refus > 0) {
+      txtReponses += " • " + data.refus + " refus";
+    }
+    
+    // On affiche le taux ou le NPS
+    rateTxt = hasNote ? fmtPct(data.satisfactionGlobale) : (data.nps ? data.nps.npsScore + " NPS" : "N/A"); 
+    metaTxt = txtReponses; 
+  }
 
   card.innerHTML = '<div class="name">' + escapeHtml(nomEnquete(sheet)) + '</div><div class="rate">' + escapeHtml(rateTxt) + '</div><div class="meta-line"><span>' + escapeHtml(metaTxt) + '</span><span class="arrow">→</span></div>';
   card.addEventListener("click", () => ouvrirDetail(sheet));
@@ -343,7 +348,14 @@ function afficherDetail(data) {
 
   const header = document.createElement("div");
   header.className = "box accent detail-header" + (levelClass ? " " + levelClass : "");
-  header.innerHTML = '<div class="info"><div class="eyebrow">Formation</div><h1>' + escapeHtml(nomEnquete(data.enquete || currentSheet)) + '</h1><div class="sub">' + (ok ? '<b>' + data.reponses + '</b> réponse' + (data.reponses > 1 ? 's' : '') : 'Aucune réponse') + '</div></div><div class="rate-block"><div class="label">Taux moyen</div><div class="value">' + (!ok ? '—' : (!hasNote ? 'N/A' : fmtPct(data.satisfactionGlobale))) + '</div></div>';
+  
+  // Modification ici pour afficher aussi le nombre de refus dans le détail
+  let subText = ok ? '<b>' + data.reponses + '</b> réponse' + (data.reponses > 1 ? 's' : '') : 'Aucune réponse';
+  if (data.refus && data.refus > 0) {
+    subText += ' <span style="font-size: 0.9em; color: var(--muted);">(et ' + data.refus + ' refus)</span>';
+  }
+
+  header.innerHTML = '<div class="info"><div class="eyebrow">Formation</div><h1>' + escapeHtml(nomEnquete(data.enquete || currentSheet)) + '</h1><div class="sub">' + subText + '</div></div><div class="rate-block"><div class="label">Taux moyen</div><div class="value">' + (!ok ? '—' : (!hasNote ? 'N/A' : fmtPct(data.satisfactionGlobale))) + '</div></div>';
   zone.appendChild(header);
 
   if (data.nps) zone.appendChild(carteNPS(data.nps));
@@ -354,12 +366,11 @@ function afficherDetail(data) {
     zone.appendChild(construireTableauClasses(data));
   }
 
-  /* === Carte Verbatims (Format texte continu avec tirets) === */
+  /* === Carte Verbatims === */
   if (detailVerbatims.length > 0) {
     const verbCard = document.createElement("div");
     verbCard.className = "card";
     
-    // On regroupe tout dans un seul <div> avec un séparateur " - "
     const listHtml = `
       <div style="line-height: 1.6; font-size: 14px; text-align: justify; padding: 5px;">
         ${detailVerbatims.map(v => escapeHtml(v)).join(" - ")}
@@ -388,7 +399,7 @@ function afficherDetail(data) {
     zone.appendChild(verbCard);
   }
 
-  /* === Évolution (Graphique direct dans la page) === */
+  /* === Évolution === */
   if (data.evolution && data.evolution.length > 0) {
     const evoCard = document.createElement("div");
     evoCard.className = "card";
