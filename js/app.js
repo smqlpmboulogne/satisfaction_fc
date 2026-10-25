@@ -108,6 +108,10 @@ function afficherVueAccueil() {
   document.getElementById("page-title").textContent = "📊 Tableau de bord Satisfaction FC";
   document.getElementById("btnVerbatims").hidden = true;
   document.getElementById("verbCount").textContent = "0";
+  
+  const btnHome = document.getElementById("btnHome");
+  if (btnHome) btnHome.style.display = "none";
+  
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -115,6 +119,10 @@ function afficherVueDetail() {
   document.getElementById("home-view").hidden = true;
   document.getElementById("detail-view").hidden = false;
   document.getElementById("page-title").textContent = "📊 " + nomEnquete(currentSheet);
+  
+  const btnHome = document.getElementById("btnHome");
+  if (btnHome) btnHome.style.display = "inline-block";
+
   if (surveysData[currentSheet]) { afficherDetail(surveysData[currentSheet]); } else { rechargerDetail(); }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -179,7 +187,7 @@ async function fetchDashboard(sheet, opts) {
   return data;
 }
 
-/* ---------- Chargement des cartes ---------- */
+/* ---------- Chargement des cartes et du tableau ---------- */
 async function chargerToutesLesCartes() {
   const id = ++requeteId;
   masquerMessage();
@@ -187,6 +195,16 @@ async function chargerToutesLesCartes() {
   zone.innerHTML = "";
   document.getElementById("loading-home").hidden = false;
   
+  // On prépare le conteneur du tableau
+  let tableContainer = document.getElementById("table-container");
+  if (!tableContainer) {
+    tableContainer = document.createElement("div");
+    tableContainer.id = "table-container";
+    tableContainer.style.marginTop = "40px";
+    zone.parentNode.insertBefore(tableContainer, zone.nextSibling);
+  }
+  tableContainer.innerHTML = "";
+
   const globalBanner = document.getElementById("global-satisfaction");
   if (globalBanner) globalBanner.style.display = "none";
 
@@ -206,6 +224,7 @@ async function chargerToutesLesCartes() {
 
   let totalReponsesGlobal = 0;
   let totalPointsGlobal = 0;
+  const tableData = []; // Pour stocker les données du tableau
 
   await Promise.all(sheetsList.map(async sheet => {
     try {
@@ -218,6 +237,14 @@ async function chargerToutesLesCartes() {
           totalReponsesGlobal += data.reponses;
           totalPointsGlobal += (data.satisfactionGlobale * data.reponses);
         }
+        
+        tableData.push({
+          nom: nomEnquete(sheet),
+          reponses: data.reponses,
+          refus: data.refus || 0,
+          taux: hasNote ? data.satisfactionGlobale : null,
+          id: sheet
+        });
       }
 
       remplacerCarte(sheet, carteFinale(sheet, data));
@@ -235,6 +262,10 @@ async function chargerToutesLesCartes() {
     const lvl = niveau(tauxMoyen);
     globalBanner.className = "box accent detail-header " + lvl;
     globalBanner.style.display = "flex";
+  }
+
+  if (id === requeteId) {
+    afficherTableauRecap(tableData, tableContainer);
   }
 
   majBadgeMAJ();
@@ -273,13 +304,10 @@ function carteFinale(sheet, data) {
     metaTxt = "Erreur"; 
   } 
   else if (ok) {
-    // On prépare le texte des réponses et des refus
     let txtReponses = data.reponses + " réponse" + (data.reponses > 1 ? "s" : "");
-    if (data.refus && data.refus > 0) {
+    if (data.refus && Number(data.refus) > 0) {
       txtReponses += " • " + data.refus + " refus";
     }
-    
-    // On affiche le taux ou le NPS
     rateTxt = hasNote ? fmtPct(data.satisfactionGlobale) : (data.nps ? data.nps.npsScore + " NPS" : "N/A"); 
     metaTxt = txtReponses; 
   }
@@ -303,6 +331,77 @@ function majBadgeMAJ() {
   document.getElementById("updated").classList.add("on");
 }
 
+/* ---------- Tableau Récapitulatif ---------- */
+function afficherTableauRecap(data, container) {
+  if (!data.length) return;
+
+  let sortKey = "nom";
+  let sortAsc = true;
+
+  const renderTable = () => {
+    const sorted = [...data].sort((a, b) => {
+      let v1 = a[sortKey];
+      let v2 = b[sortKey];
+      
+      if (v1 === null) v1 = -1;
+      if (v2 === null) v2 = -1;
+
+      if (typeof v1 === "string") {
+        return sortAsc ? v1.localeCompare(v2, "fr") : v2.localeCompare(v1, "fr");
+      }
+      return sortAsc ? v1 - v2 : v2 - v1;
+    });
+
+    const th = (key, label) => {
+      const arrow = sortKey === key ? (sortAsc ? ' ▲' : ' ▼') : '';
+      return `<th data-key="${key}" style="cursor:pointer; user-select:none; text-align:left; padding: 10px; background: #e3edf5; color: #1e3a5f; border-bottom: 2px solid #c9d9e8;">${label}${arrow}</th>`;
+    };
+
+    let html = `<div class="box accent" style="padding: 0; overflow: hidden; margin-top: 20px;">
+      <div style="padding: 15px 20px; border-bottom: 1px solid #e3edf5;">
+        <h2 style="margin: 0; font-size: 18px; color: #1e3a5f;">📋 Récapitulatif par formation</h2>
+      </div>
+      <div class="table-wrap" style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <thead>
+            <tr>
+              ${th("nom", "Formation")}
+              ${th("reponses", "Réponses")}
+              ${th("refus", "Refus")}
+              ${th("taux", "Taux de satisfaction")}
+            </tr>
+          </thead>
+          <tbody>`;
+
+    sorted.forEach(row => {
+      const tauxTxt = row.taux === null ? "N/A" : fmtPct(row.taux);
+      const color = row.taux === null ? "var(--muted)" : `var(--${niveau(row.taux) === 'high' ? 'success' : niveau(row.taux) === 'mid' ? 'warning' : 'danger'})`;
+      
+      html += `<tr style="border-bottom: 1px solid #f0f5fa; cursor: pointer; transition: background 0.2s;" onclick="ouvrirDetail('${row.id}')" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+        <td style="padding: 12px 10px; font-weight: 600; color: #1e3a5f;">${escapeHtml(row.nom)}</td>
+        <td style="padding: 12px 10px;">${row.reponses}</td>
+        <td style="padding: 12px 10px; color: var(--muted);">${row.refus > 0 ? row.refus : "—"}</td>
+        <td style="padding: 12px 10px; font-weight: 700; color: ${color};">${tauxTxt}</td>
+      </tr>`;
+    });
+
+    html += `</tbody></table></div></div>`;
+    container.innerHTML = html;
+
+    container.querySelectorAll("th[data-key]").forEach(el => {
+      el.addEventListener("click", () => {
+        const k = el.dataset.key;
+        if (sortKey === k) sortAsc = !sortAsc;
+        else { sortKey = k; sortAsc = true; }
+        renderTable();
+      });
+    });
+  };
+
+  renderTable();
+}
+
+/* ---------- Rendu du Détail ---------- */
 async function rechargerDetail() {
   if (!currentSheet) return;
   const id = ++requeteId;
@@ -328,7 +427,6 @@ function imprimerRapport() {
   }, 1000);
 }
 
-/* ---------- Rendu du Détail ---------- */
 function afficherDetail(data) {
   const zone = document.getElementById("detail-content");
   zone.innerHTML = "";
@@ -349,8 +447,7 @@ function afficherDetail(data) {
   const header = document.createElement("div");
   header.className = "box accent detail-header" + (levelClass ? " " + levelClass : "");
   
-  // Modification ici pour afficher aussi le nombre de refus dans le détail
-   let subText = ok ? '<b>' + data.reponses + '</b> réponse' + (data.reponses > 1 ? 's' : '') : 'Aucune réponse';
+  let subText = ok ? '<b>' + data.reponses + '</b> réponse' + (data.reponses > 1 ? 's' : '') : 'Aucune réponse';
   if (data.refus && Number(data.refus) > 0) {
     subText += ' <span style="font-size: 0.9em; color: var(--muted);">• ' + data.refus + ' refus</span>';
   }
@@ -366,7 +463,6 @@ function afficherDetail(data) {
     zone.appendChild(construireTableauClasses(data));
   }
 
-  /* === Carte Verbatims === */
   if (detailVerbatims.length > 0) {
     const verbCard = document.createElement("div");
     verbCard.className = "card";
@@ -399,7 +495,6 @@ function afficherDetail(data) {
     zone.appendChild(verbCard);
   }
 
-  /* === Évolution === */
   if (data.evolution && data.evolution.length > 0) {
     const evoCard = document.createElement("div");
     evoCard.className = "card";
