@@ -352,7 +352,7 @@ function afficherDetail(data) {
   // Modification ici pour afficher aussi le nombre de refus dans le détail
   let subText = ok ? '<b>' + data.reponses + '</b> réponse' + (data.reponses > 1 ? 's' : '') : 'Aucune réponse';
   if (data.refus && data.refus > 0) {
-    subText += ' <span style="font-size: 0.9em; color: var(--muted);">(et ' + data.refus + ' refus)</span>';
+    subText += ' <span style="font-size: 0.9em; color: var(--muted);">• ' + data.refus + ' refus</span>';
   }
 
   header.innerHTML = '<div class="info"><div class="eyebrow">Formation</div><h1>' + escapeHtml(nomEnquete(data.enquete || currentSheet)) + '</h1><div class="sub">' + subText + '</div></div><div class="rate-block"><div class="label">Taux moyen</div><div class="value">' + (!ok ? '—' : (!hasNote ? 'N/A' : fmtPct(data.satisfactionGlobale))) + '</div></div>';
