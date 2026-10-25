@@ -187,7 +187,7 @@ async function fetchDashboard(sheet, opts) {
   return data;
 }
 
-/* ---------- Chargement des cartes et du tableau ---------- */
+/* ---------- Chargement et affichage du tableau ---------- */
 async function chargerToutesLesCartes() {
   const id = ++requeteId;
   masquerMessage();
@@ -217,16 +217,13 @@ async function chargerToutesLesCartes() {
 
   if (loadingHome) loadingHome.hidden = true;
   if (!sheetsList.length) { tableContainer.innerHTML = '<div class="box empty">Aucune formation disponible.</div>'; return; }
-  document.getElementById("loading-home").hidden = true;
-  if (!sheetsList.length) { zone.innerHTML = '<div class="box empty">Aucune formation disponible.</div>'; return; }
 
   const filters = getDateFilters();
   filters.summary = 1;
-  sheetsList.forEach(sheet => zone.appendChild(squeletteCarte(sheet)));
-
+  
   let totalReponsesGlobal = 0;
   let totalPointsGlobal = 0;
-  const tableData = []; // Pour stocker les données du tableau
+  const tableData = [];
 
   await Promise.all(sheetsList.map(async sheet => {
     try {
@@ -248,11 +245,8 @@ async function chargerToutesLesCartes() {
           id: sheet
         });
       }
-
-      remplacerCarte(sheet, carteFinale(sheet, data));
     } catch (err) {
-      if (id !== requeteId) return;
-      remplacerCarte(sheet, carteErreur(sheet, err.message));
+      console.error("Erreur sur la formation " + sheet, err);
     }
   }));
   
@@ -274,60 +268,6 @@ async function chargerToutesLesCartes() {
   gererNavigation();
 }
 
-function squeletteCarte(sheet) {
-  const card = document.createElement("div");
-  card.className = "box accent survey-card";
-  card.dataset.sheet = sheet;
-  card.innerHTML = '<div class="name">' + escapeHtml(nomEnquete(sheet)) + '</div><div class="rate" style="color:var(--muted)">…</div><div class="meta-line"><span>Chargement…</span></div>';
-  return card;
-}
-
-function remplacerCarte(sheet, newCard) {
-  const old = document.querySelector('.survey-card[data-sheet="' + CSS.escape(sheet) + '"]');
-  if (old) old.replaceWith(newCard);
-}
-
-function carteFinale(sheet, data) {
-  const ok = data && data.success !== false && (data.reponses || 0) > 0;
-  const hasNote = ok && (data.hasNote || (data.criteresNote && data.criteresNote.length > 0));
-  const levelClass = hasNote ? niveau(data.satisfactionGlobale) : "";
-  const card = document.createElement("div");
-  card.dataset.sheet = sheet;
-  card.setAttribute("role", "button");
-  card.setAttribute("tabindex", "0");
-  card.className = "box accent survey-card" + (levelClass ? " " + levelClass : "");
-  if (!ok) card.classList.add("empty");
-  if (ok && !hasNote) card.classList.add("no-notes");
-
-  let rateTxt = "—", metaTxt = "Aucune réponse";
-  
-  if (data && data.success === false) { 
-    rateTxt = "⚠"; 
-    metaTxt = "Erreur"; 
-  } 
-  else if (ok) {
-    let txtReponses = data.reponses + " réponse" + (data.reponses > 1 ? "s" : "");
-    if (data.refus && Number(data.refus) > 0) {
-      txtReponses += " • " + data.refus + " refus";
-    }
-    rateTxt = hasNote ? fmtPct(data.satisfactionGlobale) : (data.nps ? data.nps.npsScore + " NPS" : "N/A"); 
-    metaTxt = txtReponses; 
-  }
-
-  card.innerHTML = '<div class="name">' + escapeHtml(nomEnquete(sheet)) + '</div><div class="rate">' + escapeHtml(rateTxt) + '</div><div class="meta-line"><span>' + escapeHtml(metaTxt) + '</span><span class="arrow">→</span></div>';
-  card.addEventListener("click", () => ouvrirDetail(sheet));
-  card.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ouvrirDetail(sheet); } });
-  return card;
-}
-
-function carteErreur(sheet, msg) {
-  const card = document.createElement("div");
-  card.dataset.sheet = sheet;
-  card.className = "box accent survey-card empty";
-  card.innerHTML = '<div class="name">' + escapeHtml(nomEnquete(sheet)) + '</div><div class="rate">⚠</div><div class="meta-line"><span>Erreur</span></div>';
-  return card;
-}
-
 function majBadgeMAJ() {
   document.getElementById("updated-date").textContent = new Date().toLocaleString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   document.getElementById("updated").classList.add("on");
@@ -335,7 +275,10 @@ function majBadgeMAJ() {
 
 /* ---------- Tableau Récapitulatif ---------- */
 function afficherTableauRecap(data, container) {
-  if (!data.length) return;
+  if (!data.length) {
+    container.innerHTML = '<div class="box empty">Aucune donnée à afficher pour cette période.</div>';
+    return;
+  }
 
   let sortKey = "nom";
   let sortAsc = true;
