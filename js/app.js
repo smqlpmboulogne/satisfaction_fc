@@ -191,17 +191,17 @@ async function fetchDashboard(sheet, opts) {
 async function chargerToutesLesCartes() {
   const id = ++requeteId;
   masquerMessage();
-  const zone = document.getElementById("cards-grid");
-  zone.innerHTML = "";
-  document.getElementById("loading-home").hidden = false;
   
-  // On prépare le conteneur du tableau
+  const loadingHome = document.getElementById("loading-home");
+  if (loadingHome) loadingHome.hidden = false;
+  
+  // On cible le conteneur du tableau
   let tableContainer = document.getElementById("table-container");
   if (!tableContainer) {
     tableContainer = document.createElement("div");
     tableContainer.id = "table-container";
-    tableContainer.style.marginTop = "40px";
-    zone.parentNode.insertBefore(tableContainer, zone.nextSibling);
+    const homeView = document.getElementById("home-view");
+    if (homeView) homeView.appendChild(tableContainer);
   }
   tableContainer.innerHTML = "";
 
@@ -210,11 +210,13 @@ async function chargerToutesLesCartes() {
 
   try { if (!sheetsList.length) sheetsList = await getSheets(); } catch (err) {
     if (id !== requeteId) return;
-    document.getElementById("loading-home").hidden = true;
+    if (loadingHome) loadingHome.hidden = true;
     afficherMessage("❌ Impossible de lister les formations : " + err.message);
     return;
   }
 
+  if (loadingHome) loadingHome.hidden = true;
+  if (!sheetsList.length) { tableContainer.innerHTML = '<div class="box empty">Aucune formation disponible.</div>'; return; }
   document.getElementById("loading-home").hidden = true;
   if (!sheetsList.length) { zone.innerHTML = '<div class="box empty">Aucune formation disponible.</div>'; return; }
 
