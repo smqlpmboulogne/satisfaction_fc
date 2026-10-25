@@ -195,7 +195,7 @@ async function chargerToutesLesCartes() {
   const loadingHome = document.getElementById("loading-home");
   if (loadingHome) loadingHome.hidden = false;
   
-  // On cible le conteneur du tableau
+  // On cible le conteneur du tableau (ou on le crée s'il n'existe pas)
   let tableContainer = document.getElementById("table-container");
   if (!tableContainer) {
     tableContainer = document.createElement("div");
@@ -203,7 +203,8 @@ async function chargerToutesLesCartes() {
     const homeView = document.getElementById("home-view");
     if (homeView) homeView.appendChild(tableContainer);
   }
-  tableContainer.innerHTML = "";
+  // On vide le tableau avant de le recharger
+  if (tableContainer) tableContainer.innerHTML = "";
 
   const globalBanner = document.getElementById("global-satisfaction");
   if (globalBanner) globalBanner.style.display = "none";
@@ -216,7 +217,11 @@ async function chargerToutesLesCartes() {
   }
 
   if (loadingHome) loadingHome.hidden = true;
-  if (!sheetsList.length) { tableContainer.innerHTML = '<div class="box empty">Aucune formation disponible.</div>'; return; }
+  
+  if (!sheetsList.length) { 
+    if (tableContainer) tableContainer.innerHTML = '<div class="box empty">Aucune formation disponible.</div>'; 
+    return; 
+  }
 
   const filters = getDateFilters();
   filters.summary = 1;
@@ -253,14 +258,14 @@ async function chargerToutesLesCartes() {
   if (id === requeteId && totalReponsesGlobal > 0 && globalBanner) {
     const tauxMoyen = totalPointsGlobal / totalReponsesGlobal;
     const valEl = document.getElementById("global-rate-value");
-    valEl.textContent = fmtPct(tauxMoyen);
+    if (valEl) valEl.textContent = fmtPct(tauxMoyen);
     
     const lvl = niveau(tauxMoyen);
     globalBanner.className = "box accent detail-header " + lvl;
     globalBanner.style.display = "flex";
   }
 
-  if (id === requeteId) {
+  if (id === requeteId && tableContainer) {
     afficherTableauRecap(tableData, tableContainer);
   }
 
