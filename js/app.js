@@ -2,7 +2,7 @@
    Tableau de bord Satisfaction — Projet FC (Proxy Cloudflare)
    ============================================================ */
 
-// 👇 URL du Worker Cloudflare pour le FC
+// 👇 URL du Worker Cloudflare pour le FC (Attention au "L" et non "i")
 const API_URL = "https://proxy-satisfaction.smqlpmboulogne.workers.dev/?target=fc";
 
 const NOMS_ENQUETES = {
@@ -140,7 +140,6 @@ function ecrireCache(key, data) { try { localStorage.setItem(key, JSON.stringify
 function getDateFilters() { return { start: document.getElementById("dateDebut").value, end: document.getElementById("dateFin").value }; }
 
 function buildUrl(sheet, opts = {}) {
-  // ⚠️ Utilisation de "&action" car "?target=fc" est déjà dans l'URL de base
   let url = API_URL + "&action=dashboard&sheet=" + encodeURIComponent(sheet);
   if (opts.summary) url += "&summary=1";
   if (opts.classe) url += "&classe=" + encodeURIComponent(opts.classe);
@@ -149,12 +148,19 @@ function buildUrl(sheet, opts = {}) {
   return url;
 }
 
-async function fetchJson(url) { const rep = await fetch(url, { cache: "no-store" }); if (!rep.ok) throw new Error("HTTP " + rep.status); return rep.json(); }
+async function fetchJson(url) { 
+  try {
+    const rep = await fetch(url, { cache: "no-store" }); 
+    if (!rep.ok) throw new Error("HTTP " + rep.status); 
+    return rep.json(); 
+  } catch(e) {
+    throw new Error(`Réseau/CORS sur ${url} : ${e.message}`);
+  }
+}
 
 async function getSheets() {
   try { const raw = localStorage.getItem(SHEETS_KEY); if (raw) { const o = JSON.parse(raw); if (Date.now() - o.t < SHEETS_TTL && Array.isArray(o.d)) return o.d; } } catch (e) {}
   
-  // ⚠️ Utilisation de "&action" ici aussi
   const j = await fetchJson(API_URL + "&action=sheets");
   
   if (j.success === false) throw new Error(j.message);
@@ -180,6 +186,10 @@ async function chargerToutesLesCartes() {
   const zone = document.getElementById("cards-grid");
   zone.innerHTML = "";
   document.getElementById("loading-home").hidden = false;
+  
+  // On cache le bandeau global au début du chargement
+  const globalBanner = document.getElementById("global-satisfaction");
+  if (globalBanner) globalBanner.style.display = "none";
 
   try { if (!sheetsList.length) sheetsList = await getSheets(); } catch (err) {
     if (id !== requeteId) return;
@@ -195,16 +205,44 @@ async function chargerToutesLesCartes() {
   filters.summary = 1;
   sheetsList.forEach(sheet => zone.appendChild(squeletteCarte(sheet)));
 
+  // --- NOUVEAU : Variables pour calculer la moyenne globale ---
+  let totalReponsesGlobal = 0;
+  let totalPointsGlobal = 0;
+
   await Promise.all(sheetsList.map(async sheet => {
     try {
       const data = await fetchDashboard(sheet, filters);
       if (id !== requeteId) return;
+      
+      // --- NOUVEAU : On additionne les données valides ---
+      if (data && data.success !== false && (data.reponses || 0) > 0) {
+        const hasNote = data.hasNote || (data.criteresNote && data.criteresNote.length > 0);
+        if (hasNote && typeof data.satisfactionGlobale === 'number') {
+          totalReponsesGlobal += data.reponses;
+          totalPointsGlobal += (data.satisfactionGlobale * data.reponses);
+        }
+      }
+      // ----------------------------------------------------------
+
       remplacerCarte(sheet, carteFinale(sheet, data));
     } catch (err) {
       if (id !== requeteId) return;
       remplacerCarte(sheet, carteErreur(sheet, err.message));
     }
   }));
+  
+  // --- NOUVEAU : Affichage du taux global calculé ---
+  if (id === requeteId && totalReponsesGlobal > 0 && globalBanner) {
+    const tauxMoyen = totalPointsGlobal / totalReponsesGlobal;
+    const valEl = document.getElementById("global-rate-value");
+    valEl.textContent = fmtPct(tauxMoyen);
+    
+    // On applique la couleur (vert, orange, rouge) selon le niveau
+    const lvl = niveau(tauxMoyen);
+    globalBanner.className = "box accent detail-header " + lvl;
+    globalBanner.style.display = "flex";
+  }
+
   majBadgeMAJ();
   gererNavigation();
 }
