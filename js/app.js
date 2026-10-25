@@ -350,8 +350,8 @@ function afficherDetail(data) {
   header.className = "box accent detail-header" + (levelClass ? " " + levelClass : "");
   
   // Modification ici pour afficher aussi le nombre de refus dans le détail
-  let subText = ok ? '<b>' + data.reponses + '</b> réponse' + (data.reponses > 1 ? 's' : '') : 'Aucune réponse';
-  if (data.refus && data.refus > 0) {
+   let subText = ok ? '<b>' + data.reponses + '</b> réponse' + (data.reponses > 1 ? 's' : '') : 'Aucune réponse';
+  if (data.refus && Number(data.refus) > 0) {
     subText += ' <span style="font-size: 0.9em; color: var(--muted);">• ' + data.refus + ' refus</span>';
   }
 
