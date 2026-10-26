@@ -4,10 +4,10 @@
 
 const API_URL = "https://proxy-satisfaction.smqlpmboulogne.workers.dev/?target=fc";
 
-const CACHE_PREFIX = "sat_public_fc_v1_";
+const CACHE_PREFIX = "sat_public_fc_v2_";
 const CACHE_TTL    = 0; 
-const SHEETS_KEY   = "sat_sheets_public_fc_v1";
-const SHEETS_TTL   = 60 * 60 * 1000;
+const SHEETS_KEY   = "sat_sheets_public_fc_v2";
+const SHEETS_TTL   = 0; // Cache désactivé pour voir les nouvelles formations immédiatement
 
 let sheetsList = [];
 let requeteId = 0;
@@ -248,7 +248,9 @@ function afficherTableauPublic(data, container) {
 
     const th = (key, label) => {
       const arrow = sortKey === key ? (sortAsc ? ' ▲' : ' ▼') : '';
-      return `<th data-key="${key}" style="cursor:pointer; user-select:none; text-align:left; padding: 15px 20px; background: #e3edf5; color: #1e3a5f; border-bottom: 2px solid #c9d9e8;">${label}${arrow}</th>`;
+      // On aligne à gauche pour le nom, et au centre pour le taux
+      const align = key === "nom" ? "left" : "center";
+      return `<th data-key="${key}" style="cursor:pointer; user-select:none; text-align:${align}; padding: 15px 20px; background: #e3edf5; color: #1e3a5f; border-bottom: 2px solid #c9d9e8;">${label}${arrow}</th>`;
     };
 
     let html = `<div class="box accent" style="padding: 0; overflow: hidden; margin-top: 20px;">
@@ -269,10 +271,10 @@ function afficherTableauPublic(data, container) {
       const tauxTxt = row.taux === null ? "N/A" : fmtPct(row.taux);
       const color = row.taux === null ? "var(--muted)" : `var(--${niveau(row.taux) === 'high' ? 'success' : niveau(row.taux) === 'mid' ? 'warning' : 'danger'})`;
       
-      // Ligne sans curseur "pointer" et sans événement onclick
+      // On laisse la formation à gauche et on centre le taux
       html += `<tr style="border-bottom: 1px solid #f0f5fa;">
-        <td style="padding: 15px 20px; font-weight: 600; color: #1e3a5f;">${escapeHtml(row.nom)}</td>
-        <td style="padding: 15px 20px; font-weight: 700; color: ${color}; font-size: 16px;">${tauxTxt}</td>
+        <td style="padding: 15px 20px; font-weight: 600; color: #1e3a5f; text-align: left;">${escapeHtml(row.nom)}</td>
+        <td style="padding: 15px 20px; font-weight: 700; color: ${color}; font-size: 16px; text-align: center;">${tauxTxt}</td>
       </tr>`;
     });
 
