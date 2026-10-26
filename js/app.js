@@ -4,19 +4,16 @@
 
 const API_URL = "https://proxy-satisfaction.smqlpmboulogne.workers.dev/?target=fc";
 
-const NOMS_ENQUETES = {
-  "Formations": "Formations"
-};
-
-const CACHE_PREFIX = "sat_dash_fc_v64_";
-const CACHE_TTL    = 0; // Cache désactivé pour voir les nouvelles réponses immédiatement
-const SHEETS_KEY   = "sat_sheets_fc_v64";
-const SHEETS_TTL   = 60 * 60 * 1000;
+const CACHE_PREFIX = "sat_dash_fc_v66_";
+const CACHE_TTL    = 0; 
+const SHEETS_KEY   = "sat_sheets_fc_v66";
+const SHEETS_TTL   = 0; // Cache désactivé pour voir les nouvelles formations immédiatement
 
 let sheetsList = [];
 let currentSheet = null;
 let detailVerbatims = [];
 let requeteId = 0;
+let typeEvaluation = "chaud"; // 'chaud' ou 'froid'
 const surveysData = {};
 
 document.addEventListener("DOMContentLoaded", initialiser);
@@ -25,7 +22,6 @@ function initialiser() {
   document.getElementById("year").textContent = new Date().getFullYear();
   initialiserAnnees();
   
-  document.getElementById("btnVerbatims").addEventListener("click", telechargerVerbatims);
   document.getElementById("btnPrint").addEventListener("click", imprimerRapport);
   
   document.getElementById("anneeScolaire").addEventListener("change", (e) => {
@@ -41,7 +37,51 @@ function initialiser() {
   });
 
   window.addEventListener("hashchange", gererNavigation);
-  chargerToutesLesCartes();
+  
+  // Initialisation de la couleur au démarrage
+  changerType("chaud");
+}
+
+function changerType(type) {
+  typeEvaluation = type;
+  
+  const btnChaud = document.getElementById("btnTypeChaud");
+  const btnFroid = document.getElementById("btnTypeFroid");
+  const mainContent = document.getElementById("main-content");
+  
+  if (type === 'chaud') {
+    mainContent.style.backgroundColor = "#fff3ee"; 
+    
+    btnChaud.className = "btn";
+    btnChaud.style.backgroundColor = "#e86a3a";
+    btnChaud.style.color = "#fff";
+    btnChaud.style.border = "2px solid #c95426";
+    btnChaud.style.fontWeight = "bold";
+
+    btnFroid.className = "btn";
+    btnFroid.style.backgroundColor = "";
+    btnFroid.style.color = "";
+    btnFroid.style.border = "";
+    btnFroid.style.fontWeight = "normal";
+  } else {
+    mainContent.style.backgroundColor = "#eef5fc"; 
+    
+    btnFroid.className = "btn";
+    btnFroid.style.backgroundColor = "#3b82f6";
+    btnFroid.style.color = "#fff";
+    btnFroid.style.border = "2px solid #2563eb";
+    btnFroid.style.fontWeight = "bold";
+
+    btnChaud.className = "btn";
+    btnChaud.style.backgroundColor = "";
+    btnChaud.style.color = "";
+    btnChaud.style.border = "";
+    btnChaud.style.fontWeight = "normal";
+  }
+  
+  document.getElementById("global-eyebrow").textContent = "Vue d'ensemble FC (" + (type === 'chaud' ? "à chaud" : "à froid") + ")";
+  
+  if (currentSheet) rechargerDetail(); else chargerToutesLesCartes();
 }
 
 /* ---------- Gestion de l'Année Scolaire ---------- */
@@ -106,12 +146,7 @@ function afficherVueAccueil() {
   document.getElementById("home-view").hidden = false;
   document.getElementById("detail-view").hidden = true;
   document.getElementById("page-title").textContent = "📊 Tableau de bord Satisfaction FC";
-  document.getElementById("btnVerbatims").hidden = true;
-  document.getElementById("verbCount").textContent = "0";
-  
-  const btnHome = document.getElementById("btnHome");
-  if (btnHome) btnHome.style.display = "none";
-  
+  document.getElementById("btnHome").style.display = "none";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -119,10 +154,7 @@ function afficherVueDetail() {
   document.getElementById("home-view").hidden = true;
   document.getElementById("detail-view").hidden = false;
   document.getElementById("page-title").textContent = "📊 " + nomEnquete(currentSheet);
-  
-  const btnHome = document.getElementById("btnHome");
-  if (btnHome) btnHome.style.display = "inline-block";
-
+  document.getElementById("btnHome").style.display = "block"; 
   if (surveysData[currentSheet]) { afficherDetail(surveysData[currentSheet]); } else { rechargerDetail(); }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -130,7 +162,7 @@ function afficherVueDetail() {
 function ouvrirDetail(sheet) { window.location.hash = "detail/" + encodeURIComponent(sheet); }
 
 /* ---------- Helpers ---------- */
-function nomEnquete(sheet) { return NOMS_ENQUETES[sheet] || String(sheet).replace(/^Enquete_/, "").replace(/_/g, " "); }
+function nomEnquete(sheet) { return String(sheet).replace(/^Enquete_/, "").replace(/_/g, " "); }
 function niveau(v) { if (v == null || Number.isNaN(v)) return ""; if (v >= 75) return "high"; if (v >= 50) return "mid"; return "low"; }
 function fmtPct(v) { const n = Number(v); return (Number.isFinite(n) ? n : 0).toFixed(2) + "%"; }
 function escapeHtml(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]); }
@@ -139,7 +171,7 @@ function afficherMessage(txt) { const m = document.getElementById("message"); m.
 function masquerMessage() { document.getElementById("message").style.display = "none"; }
 
 /* ---------- Cache Client ---------- */
-function cacheKey(sheet, opts) { return CACHE_PREFIX + sheet + "_" + JSON.stringify(opts || {}); }
+function cacheKey(sheet, opts) { return CACHE_PREFIX + typeEvaluation + "_" + sheet + "_" + JSON.stringify(opts || {}); }
 function lireCache(key) { try { const raw = localStorage.getItem(key); if (!raw) return null; const o = JSON.parse(raw); if (Date.now() - o.t > CACHE_TTL) { localStorage.removeItem(key); return null; } return o.d; } catch (e) { return null; } }
 function ecrireCache(key, data) { try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), d: data })); } catch (e) {} }
 
@@ -147,9 +179,8 @@ function ecrireCache(key, data) { try { localStorage.setItem(key, JSON.stringify
 function getDateFilters() { return { start: document.getElementById("dateDebut").value, end: document.getElementById("dateFin").value }; }
 
 function buildUrl(sheet, opts = {}) {
-  let url = API_URL + "&action=dashboard&sheet=" + encodeURIComponent(sheet);
+  let url = API_URL + "&action=dashboard&sheet=" + encodeURIComponent(sheet) + "&type=" + typeEvaluation;
   if (opts.summary) url += "&summary=1";
-  if (opts.classe) url += "&classe=" + encodeURIComponent(opts.classe);
   if (opts.start)  url += "&start="  + encodeURIComponent(opts.start);
   if (opts.end)    url += "&end="    + encodeURIComponent(opts.end);
   return url;
@@ -170,7 +201,6 @@ async function getSheets() {
   try { const raw = localStorage.getItem(SHEETS_KEY); if (raw) { const o = JSON.parse(raw); if (Date.now() - o.t < SHEETS_TTL && Array.isArray(o.d)) return o.d; } } catch (e) {}
   
   const j = await fetchJson(API_URL + "&action=sheets");
-  
   if (j.success === false) throw new Error(j.message);
   
   const sheets = j.sheets || [];
@@ -195,7 +225,6 @@ async function chargerToutesLesCartes() {
   const loadingHome = document.getElementById("loading-home");
   if (loadingHome) loadingHome.hidden = false;
   
-  // On cible le conteneur du tableau (ou on le crée s'il n'existe pas)
   let tableContainer = document.getElementById("table-container");
   if (!tableContainer) {
     tableContainer = document.createElement("div");
@@ -203,7 +232,6 @@ async function chargerToutesLesCartes() {
     const homeView = document.getElementById("home-view");
     if (homeView) homeView.appendChild(tableContainer);
   }
-  // On vide le tableau avant de le recharger
   if (tableContainer) tableContainer.innerHTML = "";
 
   const globalBanner = document.getElementById("global-satisfaction");
@@ -246,6 +274,7 @@ async function chargerToutesLesCartes() {
           nom: nomEnquete(sheet),
           reponses: data.reponses,
           refus: data.refus || 0,
+          commentaires: data.nbCommentaires || 0, // <-- NOUVEAU
           taux: hasNote ? data.satisfactionGlobale : null,
           id: sheet
         });
@@ -304,12 +333,13 @@ function afficherTableauRecap(data, container) {
 
     const th = (key, label) => {
       const arrow = sortKey === key ? (sortAsc ? ' ▲' : ' ▼') : '';
-      return `<th data-key="${key}" style="cursor:pointer; user-select:none; text-align:left; padding: 10px; background: #e3edf5; color: #1e3a5f; border-bottom: 2px solid #c9d9e8;">${label}${arrow}</th>`;
+      const align = key === "nom" ? "left" : "center";
+      return `<th data-key="${key}" style="cursor:pointer; user-select:none; text-align:${align}; padding: 10px; background: #e3edf5; color: #1e3a5f; border-bottom: 2px solid #c9d9e8;">${label}${arrow}</th>`;
     };
 
     let html = `<div class="box accent" style="padding: 0; overflow: hidden; margin-top: 20px;">
       <div style="padding: 15px 20px; border-bottom: 1px solid #e3edf5;">
-        <h2 style="margin: 0; font-size: 18px; color: #1e3a5f;">📋 Récapitulatif par formation</h2>
+        <h2 style="margin: 0; font-size: 18px; color: #1e3a5f;">📋 Récapitulatif par formation (${typeEvaluation === 'chaud' ? "à chaud" : "à froid"})</h2>
       </div>
       <div class="table-wrap" style="overflow-x: auto;">
         <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
@@ -318,6 +348,7 @@ function afficherTableauRecap(data, container) {
               ${th("nom", "Formation")}
               ${th("reponses", "Réponses")}
               ${th("refus", "Refus")}
+              ${th("commentaires", "Commentaires")}
               ${th("taux", "Taux de satisfaction")}
             </tr>
           </thead>
@@ -328,10 +359,11 @@ function afficherTableauRecap(data, container) {
       const color = row.taux === null ? "var(--muted)" : `var(--${niveau(row.taux) === 'high' ? 'success' : niveau(row.taux) === 'mid' ? 'warning' : 'danger'})`;
       
       html += `<tr style="border-bottom: 1px solid #f0f5fa; cursor: pointer; transition: background 0.2s;" onclick="ouvrirDetail('${row.id}')" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
-        <td style="padding: 12px 10px; font-weight: 600; color: #1e3a5f;">${escapeHtml(row.nom)}</td>
-        <td style="padding: 12px 10px;">${row.reponses}</td>
-        <td style="padding: 12px 10px; color: var(--muted);">${row.refus > 0 ? row.refus : "—"}</td>
-        <td style="padding: 12px 10px; font-weight: 700; color: ${color};">${tauxTxt}</td>
+        <td style="padding: 12px 10px; font-weight: 600; color: #1e3a5f; text-align: left;">${escapeHtml(row.nom)}</td>
+        <td style="padding: 12px 10px; text-align: center;">${row.reponses}</td>
+        <td style="padding: 12px 10px; color: var(--muted); text-align: center;">${row.refus > 0 ? row.refus : "—"}</td>
+        <td style="padding: 12px 10px; color: var(--muted); text-align: center;">${row.commentaires > 0 ? row.commentaires : "—"}</td>
+        <td style="padding: 12px 10px; font-weight: 700; color: ${color}; text-align: center;">${tauxTxt}</td>
       </tr>`;
     });
 
@@ -380,8 +412,6 @@ function imprimerRapport() {
 function afficherDetail(data) {
   const zone = document.getElementById("detail-content");
   zone.innerHTML = "";
-  
-  document.getElementById("btnVerbatims").hidden = true;
 
   if (!data || data.success === false) {
     zone.innerHTML = '<div class="box empty">⚠ ' + escapeHtml((data && data.message) || "Données indisponibles") + '</div>';
@@ -402,16 +432,12 @@ function afficherDetail(data) {
     subText += ' <span style="font-size: 0.9em; color: var(--muted);">• ' + data.refus + ' refus</span>';
   }
 
-  header.innerHTML = '<div class="info"><div class="eyebrow">Formation</div><h1>' + escapeHtml(nomEnquete(data.enquete || currentSheet)) + '</h1><div class="sub">' + subText + '</div></div><div class="rate-block"><div class="label">Taux moyen</div><div class="value">' + (!ok ? '—' : (!hasNote ? 'N/A' : fmtPct(data.satisfactionGlobale))) + '</div></div>';
+  header.innerHTML = '<div class="info"><div class="eyebrow">Formation (' + (typeEvaluation === 'chaud' ? "à chaud" : "à froid") + ')</div><h1>' + escapeHtml(nomEnquete(data.enquete || currentSheet)) + '</h1><div class="sub">' + subText + '</div></div><div class="rate-block"><div class="label">Taux moyen</div><div class="value">' + (!ok ? '—' : (!hasNote ? 'N/A' : fmtPct(data.satisfactionGlobale))) + '</div></div>';
   zone.appendChild(header);
 
   if (data.nps) zone.appendChild(carteNPS(data.nps));
   const notes = (data.criteres || []).filter(c => c.type === "note");
   if (notes.length) zone.appendChild(construireGraphiqueCriteres(notes));
-  
-  if ((data.classesDetail || []).length && hasNote) {
-    zone.appendChild(construireTableauClasses(data));
-  }
 
   if (detailVerbatims.length > 0) {
     const verbCard = document.createElement("div");
@@ -443,22 +469,6 @@ function afficherDetail(data) {
     verbCard.className = "card";
     verbCard.innerHTML = `<h2>Verbatims</h2><p style="color:var(--muted); font-size:13px; margin-top:10px;">Aucun verbatim disponible pour cette sélection.</p>`;
     zone.appendChild(verbCard);
-  }
-
-  if (data.evolution && data.evolution.length > 0) {
-    const evoCard = document.createElement("div");
-    evoCard.className = "card";
-    const svg = genererSVGEvolution(data.evolution);
-    evoCard.innerHTML = `
-      <h2>Évolution de la satisfaction</h2>
-      <div style="margin-top:15px; overflow-x:auto;">
-        ${svg}
-      </div>
-      <div style="margin-top:15px;">
-        <button class="btn" onclick="telechargerEvolutionPNG('${btoa(encodeURIComponent(JSON.stringify(data.evolution)))}')">⬇ Télécharger l'image</button>
-      </div>
-    `;
-    zone.appendChild(evoCard);
   }
 }
 
@@ -522,51 +532,19 @@ function gererIA(sheet, mode) {
   }
 }
 
+function telechargerVerbatims() {
+  if (!detailVerbatims.length) return;
+  const now = new Date(), annee = now.getFullYear(), enquete = currentSheet || "enquete";
+  const nomFichier = "Verbatims_" + enquete.replace(/[^a-zA-Z0-9]/g, "_") + "_" + now.toISOString().slice(0, 10) + ".txt";
+  const entete = "VERBATIMS (" + typeEvaluation + ") — " + nomEnquete(enquete) + "\nExporté le " + now.toLocaleString("fr-FR") + "\nNombre d'entrées : " + detailVerbatims.length + "\n" + "=".repeat(64) + "\n\n";
+  const corps = detailVerbatims.map((v, i) => (i + 1) + ". " + v).join("\n\n");
+  const pied = "\n\n" + "=".repeat(64) + "\nConception et réalisation : ZEG — Lycée Maritime Boulogne, " + annee + "\nProjet réalisé dans le cadre du pacte enseignant\n";
+  const blob = new Blob([entete + corps + pied], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nomFichier;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 /* ---------- Composants Graphiques ---------- */
-function genererSVGEvolution(evolution) {
-  const w = Math.max(500, evolution.length * 80), h = 260, pL = 45, pR = 20, pT = 20, pB = 40;
-  const cW = w - pL - pR, cH = h - pT - pB;
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" style="width:100%; max-width:${w}px; height:auto; font-family:system-ui, sans-serif;">`;
-  for (let i = 0; i <= 4; i++) {
-    const val = i * 25, y = pT + cH - (val / 100) * cH;
-    svg += `<line x1="${pL}" y1="${y}" x2="${w - pR}" y2="${y}" stroke="#e3edf5" stroke-width="1" /><text x="${pL - 10}" y="${y + 4}" fill="#6b8097" font-size="11" text-anchor="end">${val}%</text>`;
-  }
-  let points = [];
-  const stepX = evolution.length > 1 ? cW / (evolution.length - 1) : cW / 2, offsetX = evolution.length > 1 ? 0 : cW / 2;
-  evolution.forEach((d, i) => {
-    const x = pL + (i * stepX) + offsetX, y = pT + cH - (d.satisfaction / 100) * cH;
-    points.push({ x, y, val: d.satisfaction, label: d.label });
-  });
-  if (points.length > 1) {
-    const pathD = points.map((p, i) => (i === 0 ? `M${p.x},${p.y}` : `L${p.x},${p.y}`)).join(" ");
-    svg += `<path d="${pathD}" fill="none" stroke="#4a90c4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
-  }
-  points.forEach((p, i) => {
-    svg += `<circle cx="${p.x}" cy="${p.y}" r="5" fill="#fff" stroke="#4a90c4" stroke-width="3" /><text x="${p.x}" y="${p.y - 12}" fill="#1e3a5f" font-size="12" font-weight="700" text-anchor="middle">${fmtPct(p.val)}</text><text x="${p.x}" y="${h - 15}" fill="#6b8097" font-size="11" text-anchor="middle">${p.label}</text>`;
-  });
-  svg += `</svg>`;
-  return svg;
-}
-
-function telechargerEvolutionPNG(evolutionBase64) {
-  const evolution = JSON.parse(decodeURIComponent(atob(evolutionBase64)));
-  const svgStr = genererSVGEvolution(evolution);
-  const blob = new Blob([svgStr], {type: 'image/svg+xml;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const img = new Image();
-  img.onload = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width * 2; canvas.height = img.height * 2;
-    const ctx = canvas.getContext('2d'); ctx.scale(2, 2);
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0);
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png'); a.download = 'Evolution_satisfaction_' + new Date().toISOString().slice(0, 10) + '.png';
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  };
-  img.src = url;
-}
-
 function carteNPS(nps) {
   const card = document.createElement("div");
   card.className = "card";
@@ -594,63 +572,4 @@ function construireGraphiqueCriteres(notes) {
   card.appendChild(container);
   setTimeout(() => { card.querySelectorAll('.chart-bar').forEach(bar => { bar.style.width = bar.dataset.w + "%"; }); }, 50);
   return card;
-}
-
-function construireTableauClasses(data) {
-  const card = document.createElement("div");
-  card.className = "card";
-  let cols = data.criteresNote || [];
-  if (!cols.length) {
-     cols = Object.keys(data.classesDetail[0].criteres || {});
-  }
-  let sortKey = "nom", sortAsc = true;
-  const render = () => {
-    const sorted = [...data.classesDetail];
-    sorted.sort((a, b) => {
-      let v1, v2;
-      if (sortKey === "nom") { v1 = a.nom; v2 = b.nom; }
-      else if (sortKey === "nb") { v1 = a.nb; v2 = b.nb; }
-      else if (sortKey === "global") { v1 = a.satisfactionGlobale; v2 = b.satisfactionGlobale; }
-      else { v1 = a.criteres[sortKey] ?? -1; v2 = b.criteres[sortKey] ?? -1; }
-      if (typeof v1 === "string") return sortAsc ? v1.localeCompare(v2, "fr") : v2.localeCompare(v1, "fr");
-      return sortAsc ? v1 - v2 : v2 - v1;
-    });
-    const th = (key, label) => {
-      const arrow = sortKey === key ? (sortAsc ? ' ▲' : ' ▼') : '';
-      const style = sortKey === key ? 'color: #fff; text-decoration: underline;' : '';
-      return `<th data-key="${key}" style="cursor:pointer; user-select:none;"><span style="${style}">${label}${arrow}</span></th>`;
-    };
-    let html = '<div class="table-wrap"><table><thead><tr>' + th("nom", "Formation") + th("nb", "Réponses");
-    cols.forEach(c => html += th(c, c));
-    html += th("global", "Taux moyen") + '</tr></thead><tbody>';
-    sorted.forEach(c => {
-      html += `<tr><td>${escapeHtml(c.nom)}</td><td>${c.nb}</td>`;
-      cols.forEach(k => { html += `<td>${c.criteres[k] == null ? "—" : fmtPct(c.criteres[k])}</td>`; });
-      html += `<td class="rate-cell">${fmtPct(c.satisfactionGlobale)}</td></tr>`;
-    });
-    html += '</tbody></table></div>';
-    card.innerHTML = "<h2>Détail par formation</h2>" + html;
-    card.querySelectorAll("th[data-key]").forEach(el => {
-      el.addEventListener("click", () => {
-        const k = el.dataset.key;
-        if (sortKey === k) sortAsc = !sortAsc;
-        else { sortKey = k; sortAsc = true; }
-        render();
-      });
-    });
-  };
-  render();
-  return card;
-}
-
-function telechargerVerbatims() {
-  if (!detailVerbatims.length) return;
-  const now = new Date(), annee = now.getFullYear(), enquete = currentSheet || "enquete";
-  const nomFichier = "Verbatims_" + enquete.replace(/[^a-zA-Z0-9]/g, "_") + "_" + now.toISOString().slice(0, 10) + ".txt";
-  const entete = "VERBATIMS — " + nomEnquete(enquete) + "\nExporté le " + now.toLocaleString("fr-FR") + "\nNombre d'entrées : " + detailVerbatims.length + "\n" + "=".repeat(64) + "\n\n";
-  const corps = detailVerbatims.map((v, i) => (i + 1) + ". " + v).join("\n\n");
-  const pied = "\n\n" + "=".repeat(64) + "\nConception et réalisation : ZEG — Lycée Maritime Boulogne, " + annee + "\nProjet réalisé dans le cadre du pacte enseignant\n";
-  const blob = new Blob([entete + corps + pied], { type: "text/plain;charset=utf-8" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nomFichier;
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
