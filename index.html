@@ -9,6 +9,26 @@
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
 <link rel="stylesheet" href="css/style.css">
+<style>
+  /* Petits ajouts CSS spécifiques pour la page publique Qualiopi */
+  .qualiopi-badge {
+    display: inline-block;
+    background-color: #e3edf5;
+    color: #1e3a5f;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .sub-text {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 5px;
+  }
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -18,7 +38,7 @@
          onerror="this.style.display='none'"
          src="logocarrelpm.png">
     <div class="text">
-      <h1 id="page-title">📊 Résultats de Satisfaction FC</h1>
+      <h1 id="page-title">Résultats de Satisfaction des Formations</h1>
       <div class="meta">
         <span>Lycée Professionnel Maritime Boulogne — Le Portel</span>
         <span class="updated" id="updated"><i></i><span>MAJ <span id="updated-date"></span></span></span>
@@ -33,12 +53,14 @@
       <div class="spin"></div><div>Chargement des résultats…</div>
     </div>
     
-    <!-- Bandeau Global -->
+    <!-- Bandeau Global Qualiopi -->
     <div id="global-satisfaction" class="box accent detail-header" style="margin-bottom: 20px; display: none;">
       <div class="info">
-        <div class="eyebrow">Vue d'ensemble FC</div>
-        <h1>Taux de satisfaction global</h1>
-        <div class="sub">Calculé sur l'ensemble des réponses (moyenne pondérée)</div>
+        <div class="eyebrow" style="margin-bottom: 5px;">Indicateur de satisfaction global</div>
+        <h1 style="font-size: 24px; margin-bottom: 5px;">Taux de satisfaction cumulé</h1>
+        <div class="sub-text">
+          Moyenne pondérée de l'ensemble des évaluations à chaud réalisées par les stagiaires.
+        </div>
       </div>
       <div class="rate-block">
         <div class="label">Taux moyen</div>
@@ -51,7 +73,10 @@
 
   <footer>
     <p>Conception et réalisation : <b>ZEG</b> — Lycée Maritime Boulogne, <span id="year"></span></p>
-    <p class="mention">Projet réalisé dans le cadre du pacte enseignant</p>
+    <p class="mention">
+      Données issues des évaluations à chaud — Mise à jour automatique<br>
+      Projet réalisé dans le cadre du pacte enseignant
+    </p>
   </footer>
 
 </div>
