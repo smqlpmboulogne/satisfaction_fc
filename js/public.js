@@ -42,11 +42,9 @@ async function chargerDonneesPubliques() {
   if (globalBanner) globalBanner.style.display = "none";
 
   try {
-    // ✅ UN SEUL APPEL à l'action "public"
     const url = API_URL + "&action=public&nocache=" + Date.now();
     const rep = await fetch(url, { cache: "no-store" });
     
-    // Vérification pour éviter l'erreur "Unexpected token <"
     const contentType = rep.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
       throw new Error("Le script Google a renvoyé du HTML (erreur interne). Vérifiez les logs Google Apps Script.");
@@ -61,7 +59,6 @@ async function chargerDonneesPubliques() {
       throw new Error(data.message || "Données invalides");
     }
 
-    // Calcul du taux global (moyenne simple pour l'affichage public)
     let total = 0, sum = 0;
     data.formations.forEach(f => {
       if (f.taux) { total++; sum += f.taux; }
@@ -95,37 +92,83 @@ function majBadgeMAJ() {
   document.getElementById("updated").classList.add("on");
 }
 
-/* ---------- Tableau Public (Sans clic, sans données sensibles) ---------- */
+/* ---------- Tableau Public (avec tri) ---------- */
 function afficherTableauPublic(data, container) {
   if (!data.length) {
     container.innerHTML = '<div class="box empty">Aucune donnée à afficher.</div>';
     return;
   }
 
-  let html = `<div class="box accent" style="padding: 0; overflow: hidden; margin-top: 20px;">
-    <div style="padding: 15px 20px; border-bottom: 1px solid #e3edf5;">
-      <h2 style="margin: 0; font-size: 18px; color: #1e3a5f;">📋 Récapitulatif par formation</h2>
-    </div>
-    <div class="table-wrap" style="overflow-x: auto;">
-      <table style="width: 100%; border-collapse: collapse; font-size: 15px;">
-        <thead>
-          <tr>
-            <th style="text-align:left; padding: 15px 20px; background: #e3edf5; color: #1e3a5f; border-bottom: 2px solid #c9d9e8;">Formation</th>
-            <th style="text-align:center; padding: 15px 20px; background: #e3edf5; color: #1e3a5f; border-bottom: 2px solid #c9d9e8;">Taux de satisfaction</th>
-          </tr>
-        </thead>
-        <tbody>`;
+  let sortKey = "nom"; // Tri par défaut : nom
+  let sortAsc = true;
 
-  data.forEach(row => {
-    const tauxTxt = row.taux ? fmtPct(row.taux) : "N/A";
-    const color = row.taux ? `var(--${niveau(row.taux) === 'high' ? 'success' : niveau(row.taux) === 'mid' ? 'warning' : 'danger'})` : "var(--muted)";
-    
-    html += `<tr style="border-bottom: 1px solid #f0f5fa;">
-      <td style="padding: 15px 20px; font-weight: 600; color: #1e3a5f; text-align: left;">${escapeHtml(row.nom)}</td>
-      <td style="padding: 15px 20px; font-weight: 700; color: ${color}; font-size: 16px; text-align: center;">${tauxTxt}</td>
-    </tr>`;
-  });
+  const renderTable = () => {
+    // 1. Tri des données
+    const sorted = [...data].sort((a, b) => {
+      let v1 = a[sortKey];
+      let v2 = b[sortKey];
+      
+      // Gestion des valeurs nulles (ex: N/A)
+      if (v1 === null) v1 = -1;
+      if (v2 === null) v2 = -1;
 
-  html += `</tbody></table></div></div>`;
-  container.innerHTML = html;
+      if (typeof v1 === "string") {
+        return sortAsc ? v1.localeCompare(v2, "fr") : v2.localeCompare(v1, "fr");
+      }
+      return sortAsc ? v1 - v2 : v2 - v1;
+    });
+
+    // 2. Création des en-têtes cliquables
+    const th = (key, label) => {
+      const arrow = sortKey === key ? (sortAsc ? ' ▲' : ' ▼') : '';
+      const align = key === "nom" ? "left" : "center";
+      // Ajout d'un curseur main pour montrer que c'est cliquable
+      return `<th data-key="${key}" style="cursor:pointer; user-select:none; text-align:${align}; padding: 15px 20px; background: #e3edf5; color: #1e3a5f; border-bottom: 2px solid #c9d9e8;">${label}${arrow}</th>`;
+    };
+
+    // 3. Génération du tableau
+    let html = `<div class="box accent" style="padding: 0; overflow: hidden; margin-top: 20px;">
+      <div style="padding: 15px 20px; border-bottom: 1px solid #e3edf5;">
+        <h2 style="margin: 0; font-size: 18px; color: #1e3a5f;">📋 Récapitulatif par formation</h2>
+        <p style="margin: 5px 0 0 0; font-size: 13px; color: var(--muted);">Cliquez sur les en-têtes pour trier.</p>
+      </div>
+      <div class="table-wrap" style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 15px;">
+          <thead>
+            <tr>
+              ${th("nom", "Formation")}
+              ${th("taux", "Taux de satisfaction")}
+            </tr>
+          </thead>
+          <tbody>`;
+
+    sorted.forEach(row => {
+      const tauxTxt = row.taux === null ? "N/A" : fmtPct(row.taux);
+      const color = row.taux === null ? "var(--muted)" : `var(--${niveau(row.taux) === 'high' ? 'success' : niveau(row.taux) === 'mid' ? 'warning' : 'danger'})`;
+      
+      html += `<tr style="border-bottom: 1px solid #f0f5fa;">
+        <td style="padding: 15px 20px; font-weight: 600; color: #1e3a5f; text-align: left;">${escapeHtml(row.nom)}</td>
+        <td style="padding: 15px 20px; font-weight: 700; color: ${color}; font-size: 16px; text-align: center;">${tauxTxt}</td>
+      </tr>`;
+    });
+
+    html += `</tbody></table></div></div>`;
+    container.innerHTML = html;
+
+    // 4. Ajout des événements de clic sur les en-têtes
+    container.querySelectorAll("th[data-key]").forEach(el => {
+      el.addEventListener("click", () => {
+        const k = el.dataset.key;
+        if (sortKey === k) {
+          sortAsc = !sortAsc; // Inverse l'ordre si on clique sur la même colonne
+        } else {
+          sortKey = k; // Sinon on change de colonne
+          sortAsc = true;
+        }
+        renderTable(); // Re-dessine le tableau trié
+      });
+    });
+  };
+
+  renderTable();
 }
