@@ -4,10 +4,10 @@
 
 const API_URL = "https://proxy-satisfaction.smqlpmboulogne.workers.dev/?target=fc";
 
-const CACHE_PREFIX = "sat_dash_fc_v66_";
+const CACHE_PREFIX = "sat_dash_fc_v68_";
 const CACHE_TTL    = 0; 
-const SHEETS_KEY   = "sat_sheets_fc_v66";
-const SHEETS_TTL   = 0; // Cache désactivé pour voir les nouvelles formations immédiatement
+const SHEETS_KEY   = "sat_sheets_fc_v68";
+const SHEETS_TTL   = 0; // Cache désactivé pour l'instant
 
 let sheetsList = [];
 let currentSheet = null;
@@ -197,27 +197,7 @@ async function fetchJson(url) {
   }
 }
 
-async function getSheets() {
-  try { const raw = localStorage.getItem(SHEETS_KEY); if (raw) { const o = JSON.parse(raw); if (Date.now() - o.t < SHEETS_TTL && Array.isArray(o.d)) return o.d; } } catch (e) {}
-  
-  const j = await fetchJson(API_URL + "&action=sheets");
-  if (j.success === false) throw new Error(j.message);
-  
-  const sheets = j.sheets || [];
-  try { localStorage.setItem(SHEETS_KEY, JSON.stringify({ t: Date.now(), d: sheets })); } catch (e) {}
-  return sheets;
-}
-
-async function fetchDashboard(sheet, opts) {
-  const key = cacheKey(sheet, opts);
-  const cached = lireCache(key);
-  if (cached) return cached;
-  const data = await fetchJson(buildUrl(sheet, opts));
-  ecrireCache(key, data);
-  return data;
-}
-
-/* ---------- Chargement et affichage du tableau ---------- */
+/* ---------- Chargement OPTIMISÉ (1 seul appel API) ---------- */
 async function chargerToutesLesCartes() {
   const id = ++requeteId;
   masquerMessage();
@@ -229,75 +209,52 @@ async function chargerToutesLesCartes() {
   if (!tableContainer) {
     tableContainer = document.createElement("div");
     tableContainer.id = "table-container";
-    const homeView = document.getElementById("home-view");
-    if (homeView) homeView.appendChild(tableContainer);
+    document.getElementById("home-view").appendChild(tableContainer);
   }
-  if (tableContainer) tableContainer.innerHTML = "";
+  tableContainer.innerHTML = "";
 
   const globalBanner = document.getElementById("global-satisfaction");
   if (globalBanner) globalBanner.style.display = "none";
 
-  try { if (!sheetsList.length) sheetsList = await getSheets(); } catch (err) {
+  const filters = getDateFilters(); // <-- Récupération des dates
+
+  try {
+    // ✅ On ajoute les dates à l'URL
+    let url = API_URL + "&action=global&type=" + typeEvaluation;
+    if (filters.start) url += "&start=" + encodeURIComponent(filters.start);
+    if (filters.end)   url += "&end=" + encodeURIComponent(filters.end);
+    url += "&nocache=" + Date.now();
+
+    const rep = await fetch(url, { cache: "no-store" });
+    if (!rep.ok) throw new Error("HTTP " + rep.status);
+    const data = await rep.json();
+    
+    if (id !== requeteId) return;
+
+    if (!data.success || !data.formations) {
+      throw new Error(data.message || "Données invalides");
+    }
+
+    // Afficher le taux global
+    if (globalBanner && data.global.totalReponses > 0) {
+      const valEl = document.getElementById("global-rate-value");
+      if (valEl) valEl.textContent = fmtPct(data.global.taux);
+      const lvl = niveau(data.global.taux);
+      globalBanner.className = "box accent detail-header " + lvl;
+      globalBanner.style.display = "flex";
+    }
+
+    // Afficher le tableau
+    afficherTableauRecap(data.formations, tableContainer);
+
+  } catch (err) {
     if (id !== requeteId) return;
     if (loadingHome) loadingHome.hidden = true;
-    afficherMessage("❌ Impossible de lister les formations : " + err.message);
+    afficherMessage("❌ Erreur : " + err.message);
     return;
   }
 
   if (loadingHome) loadingHome.hidden = true;
-  
-  if (!sheetsList.length) { 
-    if (tableContainer) tableContainer.innerHTML = '<div class="box empty">Aucune formation disponible.</div>'; 
-    return; 
-  }
-
-  const filters = getDateFilters();
-  filters.summary = 1;
-  
-  let totalReponsesGlobal = 0;
-  let totalPointsGlobal = 0;
-  const tableData = [];
-
-  await Promise.all(sheetsList.map(async sheet => {
-    try {
-      const data = await fetchDashboard(sheet, filters);
-      if (id !== requeteId) return;
-      
-      if (data && data.success !== false && (data.reponses || 0) > 0) {
-        const hasNote = data.hasNote || (data.criteresNote && data.criteresNote.length > 0);
-        if (hasNote && typeof data.satisfactionGlobale === 'number') {
-          totalReponsesGlobal += data.reponses;
-          totalPointsGlobal += (data.satisfactionGlobale * data.reponses);
-        }
-        
-        tableData.push({
-          nom: nomEnquete(sheet),
-          reponses: data.reponses,
-          refus: data.refus || 0,
-          commentaires: data.nbCommentaires || 0, // <-- NOUVEAU
-          taux: hasNote ? data.satisfactionGlobale : null,
-          id: sheet
-        });
-      }
-    } catch (err) {
-      console.error("Erreur sur la formation " + sheet, err);
-    }
-  }));
-  
-  if (id === requeteId && totalReponsesGlobal > 0 && globalBanner) {
-    const tauxMoyen = totalPointsGlobal / totalReponsesGlobal;
-    const valEl = document.getElementById("global-rate-value");
-    if (valEl) valEl.textContent = fmtPct(tauxMoyen);
-    
-    const lvl = niveau(tauxMoyen);
-    globalBanner.className = "box accent detail-header " + lvl;
-    globalBanner.style.display = "flex";
-  }
-
-  if (id === requeteId && tableContainer) {
-    afficherTableauRecap(tableData, tableContainer);
-  }
-
   majBadgeMAJ();
   gererNavigation();
 }
@@ -390,7 +347,7 @@ async function rechargerDetail() {
   const filters = getDateFilters();
   document.getElementById("detail-content").innerHTML = '<div class="loading"><div class="spin"></div><div>Chargement complet…</div></div>';
   try {
-    const data = await fetchDashboard(currentSheet, filters);
+    const data = await fetchJson(buildUrl(currentSheet, filters));
     if (id !== requeteId) return;
     afficherDetail(data);
   } catch (err) {
